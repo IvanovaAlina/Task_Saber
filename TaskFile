@@ -1,0 +1,164 @@
+using System;
+using System.IO;
+using System.Text;
+using System.Collections.Generic;
+
+namespace TaskSaber
+{
+    class ListNode
+    {
+        public ListNode Previous;
+        public ListNode Next;
+        public ListNode Rand; // произвольный элемент внутри списка
+        public string Data;
+
+        public ListNode(string data)
+        {
+            Data = data;
+        }
+    }
+
+    class ListRand
+    {
+        public ListNode Head;
+        public ListNode Tail;
+        public int Count;
+
+        public void Serialize(FileStream s)
+        {
+            string loc_data_str = "";
+            //начало строки для сохранения
+            loc_data_str += "{ \r\n";
+            loc_data_str += "\"MainList\":[ \r\n";
+            int locInd = 0; // начинаем с нулевого элемента и с головоного элемента списка
+            ListNode curItem = Head;
+            //далее идем по списку и сохраняем каждый элемент
+            while (locInd < Count)
+            {
+                loc_data_str += "{";
+                loc_data_str += "\"DataStr\":\"" + curItem.Data + "\",";
+
+                int locIndNext = -1;
+                if (locInd + 1 < Count)
+                {
+                    locIndNext = locInd;
+                }
+                loc_data_str += "\"indNext\":" + locIndNext + ",";
+
+                loc_data_str += "\"indPrev\":" + (locInd - 1) + ",";
+
+                { //ищем случайный связанный элемент в списке
+                    int locIndRand = 0;
+                    ListNode searchItem = Head;
+                    while (locIndRand < Count)
+                    {
+                        if (curItem.Rand != null)
+                        {
+                            if (curItem.Rand.Equals(searchItem))
+                            {
+                                loc_data_str += "\"indRand\":" + locIndRand + "";
+                            }
+                        }
+                        else
+                        {
+                            loc_data_str += "\"indRand\":-1";
+                            break;
+                        }
+                        locIndRand++;
+                        searchItem = searchItem.Next;
+                    }
+                }
+                // завершение одного элемента списка
+                loc_data_str += "}";
+                // проверяем, дошли мы до конца списка или нет, в зависимости от этого либо ставим запятую или нет
+                if (locInd != Count - 1)
+                {
+                    loc_data_str += ",\r\n";
+                }
+                else
+                {
+                    loc_data_str += "\r\n";
+                }
+
+                curItem = curItem.Next;
+                locInd++;
+            }
+            // завершение строки для сохраниения
+            loc_data_str += "] \r\n";
+            loc_data_str += "}\r\n";
+
+
+            // переводим все символы строки в байты
+            byte[] arrResult = Encoding.Default.GetBytes(loc_data_str);
+            s.Write(arrResult, 0, arrResult.Length);
+        }
+
+        public void Deserialize(FileStream s)
+        {
+            // считываем данные из файла (так как сохраняли в байтах и придти должно в байтах
+            byte[] arrFromFile = new byte[s.Length];
+            s.Read(arrFromFile, 0, arrFromFile.Length);
+
+            // декодируем в строку
+            string varFromFileStr = Encoding.Default.GetString(arrFromFile);
+            Dictionary<int, Dictionary<string, string>> dicResult = new Dictionary<int, Dictionary<string, string>>();
+            int firstInd = varFromFileStr.IndexOf("[") + 1;
+            int lstInd = varFromFileStr.LastIndexOf("]");
+            string strItem = varFromFileStr.Substring(firstInd, lstInd - firstInd);
+
+            string[] arrStrEachItems = strItem.Split('\n');
+
+            //мы начинаем с 2-ого элемента и заканчиваем на пердпоследнем, потому что первый и последний элемент массива пустые
+            for (int i = 1; i < arrStrEachItems.Length - 1; i++)
+            {
+                int firstElemInd = arrStrEachItems[i].IndexOf("{") + 1;
+                int lastElemInd = arrStrEachItems[i].LastIndexOf("}");
+                string arrStrEachElem = arrStrEachItems[i].Substring(firstElemInd, lastElemInd - firstElemInd);
+
+                string[] arrTextElement = arrStrEachElem.Split(',');
+                Dictionary<string, string> dicValues = new Dictionary<string, string>();
+                for (int j = 0; j < arrTextElement.Length; j++)
+                {
+                    string[] value = arrTextElement[j].Split(':');
+                    dicValues.Add(value[0].Trim('"'), value[1].Trim('"'));
+                }
+                dicResult.Add(i - 1, dicValues); //результрующий массив нужно заполнять с 0, а не с 1
+            }
+
+
+            int locInd = 0;
+            while (locInd < dicResult.Count)
+            {
+                // сначала оперделяем случайный элемент для каждого элемента списка (вычисляем по индексу элемента)
+                int locIndRand = Int32.Parse(dicResult[locInd]["indRand"]);
+                ListNode locRandElem = null;
+                ListNode curElem = Head;
+                for (int i = 0; i < Count; i++)
+                {
+                    if (i == locIndRand)
+                    {
+                        locRandElem = curElem;
+                    }
+                    curElem = curElem.Next;
+                }
+
+                // Создаем новый элемент списка
+                ListNode newElement = new ListNode(dicResult[locInd]["DataStr"]);
+                if (Head == null)
+                {
+                    Head = Tail = newElement;
+                    Head.Rand = Tail.Rand = locRandElem;
+                }
+                else
+                {
+                    Tail.Next = newElement;
+                    newElement.Previous = Tail;
+                    Tail = newElement;
+                    Tail.Rand = locRandElem;
+                }
+                Count++;
+                locInd++;
+            }
+        }
+    }
+}
